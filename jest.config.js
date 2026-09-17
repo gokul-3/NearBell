@@ -3,4 +3,5 @@ module.exports = {
   transformIgnorePatterns: [
     'node_modules/(?!(react-native|@react-native|@react-navigation|react-native-.*)/)',
   ],
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/__tests__/testUtils/'],
 };
