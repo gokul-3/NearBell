@@ -50,11 +50,22 @@ describe('transitionTrip — valid transitions', () => {
     const arrived = transitionTrip(active, { type: 'ARRIVE', arrivalTriggeredAt: 3_000 });
     expect(arrived.status).toBe('ARRIVED');
     expect(arrived.arrivalTriggeredAt).toBe(3_000);
+    expect(arrived.alarmState).toBe('RINGING');
 
     const completed = transitionTrip(arrived, { type: 'COMPLETE', completedAt: 4_000 });
     expect(completed.status).toBe('COMPLETED');
     expect(completed.completedAt).toBe(4_000);
     expect(completed.alarmState).toBe('DISMISSED');
+  });
+
+  it('ARRIVED -> ACTIVE via REARM ("I\'m not there yet")', () => {
+    const active = transitionTrip(makeReadyTrip(), { type: 'START', startedAt: 2_000 });
+    const arrived = transitionTrip(active, { type: 'ARRIVE', arrivalTriggeredAt: 3_000 });
+
+    const rearmed = transitionTrip(arrived, { type: 'REARM' });
+    expect(rearmed.status).toBe('ACTIVE');
+    expect(rearmed.alarmState).toBe('IDLE');
+    expect(rearmed.arrivalTriggeredAt).toBeUndefined();
   });
 
   it('ACTIVE -> CANCELLED', () => {

@@ -51,7 +51,8 @@ export type TripEvent =
   | { type: 'ARRIVE'; arrivalTriggeredAt: number }
   | { type: 'COMPLETE'; completedAt: number }
   | { type: 'DEGRADE' }
-  | { type: 'RECOVER' };
+  | { type: 'RECOVER' }
+  | { type: 'REARM' };
 
 export class InvalidTripTransitionError extends Error {
   constructor(status: TripStatus, event: TripEvent['type']) {
@@ -69,6 +70,7 @@ const ALLOWED_TRANSITIONS: Record<TripEvent['type'], TripStatus[]> = {
   COMPLETE: ['ARRIVED'],
   DEGRADE: ['ACTIVE', 'PAUSED'],
   RECOVER: ['DEGRADED'],
+  REARM: ['ARRIVED'],
 };
 
 function nextStatus(event: TripEvent): TripStatus {
@@ -88,6 +90,8 @@ function nextStatus(event: TripEvent): TripStatus {
     case 'DEGRADE':
       return 'DEGRADED';
     case 'RECOVER':
+      return 'ACTIVE';
+    case 'REARM':
       return 'ACTIVE';
   }
 }
@@ -115,9 +119,20 @@ export function transitionTrip(trip: Trip, event: TripEvent): Trip {
         // already-triggered arrival must never re-fire.
         return trip;
       }
-      return { ...trip, status, arrivalTriggeredAt: event.arrivalTriggeredAt };
+      return {
+        ...trip,
+        status,
+        arrivalTriggeredAt: event.arrivalTriggeredAt,
+        alarmState: 'RINGING',
+      };
     case 'COMPLETE':
       return { ...trip, status, completedAt: event.completedAt, alarmState: 'DISMISSED' };
+    case 'REARM':
+      // "I'm not there yet": go back to monitoring. Clearing
+      // arrivalTriggeredAt lets a later, genuine arrival fire again once
+      // the arrival evaluator's re-arm hysteresis (leaving the re-arm
+      // radius) allows it.
+      return { ...trip, status, arrivalTriggeredAt: undefined, alarmState: 'IDLE' };
     default:
       return { ...trip, status };
   }
