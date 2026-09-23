@@ -11,6 +11,9 @@ import {
 } from '@infrastructure/location/locationEvents';
 import { locationService, toLocationSample } from '@infrastructure/location/NearBellLocationService';
 import { alarmService } from '@infrastructure/alarm/NearBellAlarmService';
+import { logger } from '@infrastructure/logging/Logger';
+import { recordError } from '@infrastructure/logging/CrashReporter';
+import { track } from '@infrastructure/analytics/Analytics';
 import { handleLocationEvent } from './handleLocationEvent';
 
 function applyLocationEvent(trip: Trip, sample: LocationSample, source: ArrivalSource): void {
@@ -19,6 +22,7 @@ function applyLocationEvent(trip: Trip, sample: LocationSample, source: ArrivalS
 
   const justArrived = trip.status === 'ACTIVE' && updated.status === 'ARRIVED';
   if (justArrived) {
+    track({ name: 'alarm_triggered', properties: { source } });
     alarmService
       .triggerAlarm({
         tripId: updated.id,
@@ -26,7 +30,7 @@ function applyLocationEvent(trip: Trip, sample: LocationSample, source: ArrivalS
         vibrationEnabled: useSettingsStore.getState().vibrationEnabled,
       })
       .catch((error) => {
-        console.warn('[NearBell] triggerAlarm failed', error);
+        recordError(error instanceof Error ? error : new Error(String(error)), { where: 'triggerAlarm' });
       });
   }
 }
@@ -51,7 +55,7 @@ function reconcileNativeMonitoring(): void {
       alertPolicy: activeTrip.alertPolicy,
     })
     .catch((error) => {
-      console.warn('[NearBell] reconcileNativeMonitoring: startTripMonitoring rejected', error);
+      logger.warn('reconcileNativeMonitoring: startTripMonitoring rejected', { error: String(error) });
       const current = useTripStore.getState().activeTrip;
       if (current && current.id === activeTrip.id && current.status === 'ACTIVE') {
         useTripStore.getState().setActiveTrip(transitionTrip(current, { type: 'DEGRADE' }));
@@ -116,7 +120,7 @@ export function useLocationEventPipeline(): void {
     });
 
     const errorSub = subscribeMonitoringError((payload) => {
-      console.warn('[NearBell] onMonitoringError', payload);
+      logger.warn('onMonitoringError', { tripId: payload.tripId, code: payload.code });
       const trip = useTripStore.getState().activeTrip;
       if (!trip || trip.id !== payload.tripId) {
         return;

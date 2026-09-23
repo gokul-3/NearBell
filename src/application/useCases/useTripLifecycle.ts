@@ -3,6 +3,7 @@ import { generateId } from '@application/services/id';
 import { AppError } from '@application/errors';
 import { locationService } from '@infrastructure/location/NearBellLocationService';
 import { alarmService } from '@infrastructure/alarm/NearBellAlarmService';
+import { track } from '@infrastructure/analytics/Analytics';
 import { createTrip, transitionTrip, type Trip } from '@domain/trip/trip';
 import type { AlertPolicy } from '@domain/trip/alertPolicy';
 import type { Destination } from '@domain/location/destination';
@@ -35,6 +36,7 @@ export function useTripLifecycle() {
     });
     const active = transitionTrip(trip, { type: 'START', startedAt: Date.now() });
     setActiveTrip(active);
+    track({ name: 'trip_started', properties: { radiusMeters: alertPolicy.radiusMeters } });
 
     await locationService.requestBackgroundLocationPermission();
 
@@ -64,6 +66,7 @@ export function useTripLifecycle() {
     finishActiveTrip(transitionTrip(activeTrip, { type: 'CANCEL' }));
     locationService.stopTripMonitoring().catch(() => {});
     alarmService.stopAlarm().catch(() => {});
+    track({ name: 'trip_cancelled' });
   }
 
   /** "Stop alarm" — dismisses the alarm and marks the trip complete. */
@@ -75,6 +78,7 @@ export function useTripLifecycle() {
     finishActiveTrip(completed);
     locationService.stopTripMonitoring().catch(() => {});
     alarmService.stopAlarm().catch(() => {});
+    track({ name: 'trip_completed' });
   }
 
   /** "I'm not there yet" — re-arms monitoring instead of completing. */

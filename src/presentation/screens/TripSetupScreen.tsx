@@ -11,7 +11,7 @@ import { TextField } from '@presentation/components/TextField';
 import { useTheme } from '@presentation/theme/ThemeContext';
 import { useSettingsStore } from '@state/settingsStore';
 import { useTripLifecycle } from '@application/useCases/useTripLifecycle';
-import { isAppError } from '@application/errors';
+import { describeError } from '@application/errors';
 import { locationService } from '@infrastructure/location/NearBellLocationService';
 import { clampRadiusMeters } from '@domain/trip/alertPolicy';
 import { unknownPermissionStatus, type PermissionStatus } from '@domain/permissions/permissionStatus';
@@ -75,10 +75,8 @@ export function TripSetupScreen({ route, navigation }: Props) {
       await startTrip(destination, { radiusMeters });
       navigation.reset({ index: 0, routes: [{ name: 'ActiveTrip' }] });
     } catch (error) {
-      const message = isAppError(error) && error.code === 'LOCATION_PERMISSION_DENIED'
-        ? 'NearBell needs location access to monitor your trip. Grant it above, then try again.'
-        : "Couldn't start the trip. Try again.";
-      Alert.alert('Unable to start trip', message);
+      const { userMessage, recovery } = describeError(error);
+      Alert.alert('Unable to start trip', `${userMessage} ${recovery}`);
       refreshPermissionStatus();
     } finally {
       setIsStarting(false);

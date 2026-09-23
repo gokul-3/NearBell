@@ -14,6 +14,7 @@ import { useCurrentLocation } from '@application/useCases/useCurrentLocation';
 import { generateId } from '@application/services/id';
 import { mapProvider } from '@infrastructure/maps/provider';
 import { MAP_STYLE_URL } from '@infrastructure/maps/mapStyle';
+import { track, type DestinationSelectedSource } from '@infrastructure/analytics/Analytics';
 import type { Place, PlaceSearchResult } from '@infrastructure/maps/types';
 import type { RootStackParamList } from '@app/navigation/types';
 
@@ -35,12 +36,14 @@ export function DestinationPickerScreen({ navigation }: Props) {
     useCurrentLocation();
 
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  const [selectionSource, setSelectionSource] = useState<DestinationSelectedSource | null>(null);
   const [isResolvingPin, setIsResolvingPin] = useState(false);
   const [mapLoadFailed, setMapLoadFailed] = useState(false);
   const cameraRef = useRef<CameraRef>(null);
 
-  async function resolvePinName(latitude: number, longitude: number) {
+  async function resolvePinName(latitude: number, longitude: number, source: DestinationSelectedSource) {
     setSelectedPlace({ name: 'Dropped pin', latitude, longitude });
+    setSelectionSource(source);
     setIsResolvingPin(true);
     try {
       const place = await mapProvider.reverseGeocode(latitude, longitude);
@@ -54,13 +57,14 @@ export function DestinationPickerScreen({ navigation }: Props) {
 
   function selectSearchResult(place: PlaceSearchResult) {
     setSelectedPlace(place);
+    setSelectionSource('search');
     setQuery('');
     cameraRef.current?.flyTo({ center: [place.longitude, place.latitude], zoom: 15 });
   }
 
   function handleMapLongPress(event: { nativeEvent: { lngLat: [number, number] } }) {
     const [longitude, latitude] = event.nativeEvent.lngLat;
-    resolvePinName(latitude, longitude);
+    resolvePinName(latitude, longitude, 'map_pin');
   }
 
   async function handleUseCurrentLocation() {
@@ -69,12 +73,15 @@ export function DestinationPickerScreen({ navigation }: Props) {
       return;
     }
     cameraRef.current?.flyTo({ center: [sample.longitude, sample.latitude], zoom: 15 });
-    resolvePinName(sample.latitude, sample.longitude);
+    resolvePinName(sample.latitude, sample.longitude, 'current_location');
   }
 
   function confirmDestination() {
     if (!selectedPlace) {
       return;
+    }
+    if (selectionSource) {
+      track({ name: 'destination_selected', properties: { source: selectionSource } });
     }
     navigation.navigate('TripSetup', {
       destination: {

@@ -57,6 +57,16 @@ react {
 
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
+ *
+ * Left false: an on-device assembleRelease smoke test with this on true
+ * found R8 stripping react-native-screens' Fabric ViewManager registration
+ * (reflection-based, no code reference) — "Can't find ViewManager
+ * 'RNSScreenContentWrapper'" — crashing every screen. Fixing this requires
+ * either an upstream react-native-screens consumer-rules.pro fix or
+ * per-library keep rules discovered by chasing each missing
+ * ViewManager/TurboModule one at a time on a real device, which is real
+ * work belonging to a dedicated release-hardening pass, not silently
+ * guessed at here. See android/RELEASE.md.
  */
 def enableProguardInReleaseBuilds = false
 
@@ -84,7 +94,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0"
+        versionName "0.0.1"
     }
     signingConfigs {
         debug {
@@ -93,15 +103,34 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            // 09-release-checklist.md requires a signed release build before
+            // shipping. No real release keystore is committed here (that's
+            // a secret only the app owner can generate/hold — see
+            // android/RELEASE.md) — this config reads it from environment
+            // variables so CI/local release builds work once one exists,
+            // and falls back to the debug keystore so `assembleRelease`
+            // keeps working for local testing in the meantime.
+            def hasReleaseKeystore = System.getenv("NEARBELL_RELEASE_STORE_FILE") != null
+            if (hasReleaseKeystore) {
+                storeFile file(System.getenv("NEARBELL_RELEASE_STORE_FILE"))
+                storePassword System.getenv("NEARBELL_RELEASE_STORE_PASSWORD")
+                keyAlias System.getenv("NEARBELL_RELEASE_KEY_ALIAS")
+                keyPassword System.getenv("NEARBELL_RELEASE_KEY_PASSWORD")
+            } else {
+                storeFile file('debug.keystore')
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
