@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Screen } from '@presentation/components/Screen';
 import { Card } from '@presentation/components/Card';
@@ -10,8 +11,10 @@ import { TextField } from '@presentation/components/TextField';
 import { useTheme } from '@presentation/theme/ThemeContext';
 import { useSettingsStore } from '@state/settingsStore';
 import { useTripLifecycle } from '@application/useCases/useTripLifecycle';
+import { isAppError } from '@application/errors';
+import { locationService } from '@infrastructure/location/NearBellLocationService';
 import { clampRadiusMeters } from '@domain/trip/alertPolicy';
-import { unknownPermissionStatus } from '@domain/permissions/permissionStatus';
+import { unknownPermissionStatus, type PermissionStatus } from '@domain/permissions/permissionStatus';
 import type { RootStackParamList } from '@app/navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TripSetup'>;
@@ -39,20 +42,47 @@ export function TripSetupScreen({ route, navigation }: Props) {
 
   const [selectedPreset, setSelectedPreset] = useState(presetForRadius(defaultRadiusMeters));
   const [customRadiusText, setCustomRadiusText] = useState(String(defaultRadiusMeters));
+  const [permissionStatus, setPermissionStatus] = useState<PermissionStatus>(unknownPermissionStatus);
+  const [isStarting, setIsStarting] = useState(false);
 
-  // Permission status wiring lands in Phase 6 (native location); until then
-  // this is honestly "unknown" rather than a fabricated "ready".
-  const permissionStatus = unknownPermissionStatus;
+  const refreshPermissionStatus = useCallback(() => {
+    locationService
+      .getPermissionStatus()
+      .then(setPermissionStatus)
+      .catch(() => setPermissionStatus(unknownPermissionStatus));
+  }, []);
+
+  useFocusEffect(refreshPermissionStatus);
 
   const radiusMeters =
     selectedPreset === 'custom'
       ? clampRadiusMeters(Number(customRadiusText) || defaultRadiusMeters)
       : Number(selectedPreset);
 
-  function handleStartTrip() {
-    const trip = startTrip(destination, { radiusMeters });
-    navigation.reset({ index: 0, routes: [{ name: 'ActiveTrip' }] });
-    return trip;
+  async function handleFixLocation() {
+    await locationService.requestForegroundLocationPermission();
+    refreshPermissionStatus();
+  }
+
+  async function handleFixNotifications() {
+    await locationService.requestNotificationPermission();
+    refreshPermissionStatus();
+  }
+
+  async function handleStartTrip() {
+    setIsStarting(true);
+    try {
+      await startTrip(destination, { radiusMeters });
+      navigation.reset({ index: 0, routes: [{ name: 'ActiveTrip' }] });
+    } catch (error) {
+      const message = isAppError(error) && error.code === 'LOCATION_PERMISSION_DENIED'
+        ? 'NearBell needs location access to monitor your trip. Grant it above, then try again.'
+        : "Couldn't start the trip. Try again.";
+      Alert.alert('Unable to start trip', message);
+      refreshPermissionStatus();
+    } finally {
+      setIsStarting(false);
+    }
   }
 
   return (
@@ -102,12 +132,12 @@ export function TripSetupScreen({ route, navigation }: Props) {
           <ChecklistRow
             label="Location access"
             ready={permissionStatus.foregroundLocation === 'granted'}
-            onFixPress={() => navigation.navigate('PermissionHelp')}
+            onFixPress={handleFixLocation}
           />
           <ChecklistRow
             label="Notifications"
             ready={permissionStatus.notifications === 'granted'}
-            onFixPress={() => navigation.navigate('PermissionHelp')}
+            onFixPress={handleFixNotifications}
           />
           <Text
             style={[
@@ -120,7 +150,11 @@ export function TripSetupScreen({ route, navigation }: Props) {
         </Card>
 
         <View style={styles.startButton}>
-          <PrimaryButton label="Start trip" onPress={handleStartTrip} />
+          <PrimaryButton
+            label={isStarting ? 'Starting…' : 'Start trip'}
+            onPress={handleStartTrip}
+            disabled={isStarting}
+          />
         </View>
       </ScrollView>
     </Screen>

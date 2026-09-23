@@ -60,6 +60,29 @@ describe('tripStore — active trip survives an app restart', () => {
   });
 });
 
+describe('tripStore — schema migration', () => {
+  it('backfills arrivalTracking on a trip persisted before that field existed', async () => {
+    const backing = createFakeKeyValueStore();
+    const legacyTripWithoutArrivalTracking: Partial<Trip> = { ...makeActiveTrip('trip-1') };
+    delete legacyTripWithoutArrivalTracking.arrivalTracking;
+    backing.set(
+      'nearbell.trip',
+      JSON.stringify({
+        state: { activeTrip: legacyTripWithoutArrivalTracking, history: [] },
+        version: 1,
+      }),
+    );
+
+    const store = makeStore(backing);
+    await store.persist.rehydrate();
+
+    expect(store.getState().activeTrip?.arrivalTracking).toEqual({
+      consecutiveInsideSamples: 0,
+      armed: true,
+    });
+  });
+});
+
 describe('tripStore — corrupted data falls back safely', () => {
   it('does not throw and falls back to empty state', async () => {
     const backing = createFakeKeyValueStore();

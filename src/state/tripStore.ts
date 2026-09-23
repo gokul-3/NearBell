@@ -1,11 +1,20 @@
 import { create } from 'zustand';
 import { persist, type PersistStorage } from 'zustand/middleware';
 import type { Trip } from '@domain/trip/trip';
+import { initialArrivalTrackingState } from '@domain/trip/arrivalEvaluator';
 import { appStorage } from '@infrastructure/storage/mmkv';
 import { createSafePersistStorage } from '@infrastructure/storage/persistStorage';
 
 export const MAX_HISTORY_ENTRIES = 50;
-export const TRIP_SCHEMA_VERSION = 1;
+// v2: Trip gained a required `arrivalTracking` field (Phase 6). Bumping
+// forces `migrate` to run and backfill it on any trip persisted by an
+// older build, instead of rehydrating with `arrivalTracking: undefined`
+// and crashing the arrival evaluator.
+export const TRIP_SCHEMA_VERSION = 2;
+
+function backfillTrip(trip: Trip): Trip {
+  return { ...trip, arrivalTracking: trip.arrivalTracking ?? initialArrivalTrackingState };
+}
 
 export type TripPersistedState = {
   activeTrip: Trip | null;
@@ -62,8 +71,10 @@ export function createTripStore(storage: PersistStorage<TripPersistedState>) {
         migrate: (persistedState) => {
           const partial = (persistedState ?? {}) as Partial<TripPersistedState>;
           return {
-            activeTrip: partial.activeTrip ?? null,
-            history: Array.isArray(partial.history) ? partial.history.slice(0, MAX_HISTORY_ENTRIES) : [],
+            activeTrip: partial.activeTrip ? backfillTrip(partial.activeTrip) : null,
+            history: Array.isArray(partial.history)
+              ? partial.history.slice(0, MAX_HISTORY_ENTRIES).map(backfillTrip)
+              : [],
           };
         },
       },

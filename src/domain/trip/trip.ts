@@ -1,6 +1,7 @@
 import type { Destination } from '@domain/location/destination';
 import type { LocationSample } from '@domain/location/locationSample';
 import type { AlertPolicy } from '@domain/trip/alertPolicy';
+import { type ArrivalTrackingState, initialArrivalTrackingState } from '@domain/trip/arrivalEvaluator';
 
 export type TripStatus =
   | 'READY'
@@ -25,6 +26,12 @@ export type Trip = {
   lastKnownLocation?: LocationSample;
   lastDistanceMeters?: number;
   alarmState: AlarmState;
+  /**
+   * Persisted so the arrival evaluator's hysteresis (consecutive-sample
+   * counting, armed/disarmed) survives an app restart — without this, a
+   * relaunch mid-trip would silently reset re-arm state.
+   */
+  arrivalTracking: ArrivalTrackingState;
 };
 
 export function createTrip(params: {
@@ -40,6 +47,7 @@ export function createTrip(params: {
     status: 'READY',
     createdAt: params.createdAt,
     alarmState: 'IDLE',
+    arrivalTracking: initialArrivalTrackingState,
   };
 }
 
@@ -141,7 +149,15 @@ export function transitionTrip(trip: Trip, event: TripEvent): Trip {
 export function withLocationUpdate(
   trip: Trip,
   sample: LocationSample,
-  distanceMeters: number,
+  distanceMeters: number | null,
 ): Trip {
-  return { ...trip, lastKnownLocation: sample, lastDistanceMeters: distanceMeters };
+  return {
+    ...trip,
+    lastKnownLocation: sample,
+    lastDistanceMeters: distanceMeters ?? trip.lastDistanceMeters,
+  };
+}
+
+export function withArrivalTracking(trip: Trip, arrivalTracking: ArrivalTrackingState): Trip {
+  return { ...trip, arrivalTracking };
 }

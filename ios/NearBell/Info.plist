@@ -36,6 +36,12 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>NearBell uses your location to help you set a destination and to measure distance while a trip you started is active.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>NearBell needs background location access so it can alert you when you're approaching your destination even if you lock your phone or switch apps during a trip.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
