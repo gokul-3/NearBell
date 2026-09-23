@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { useTripStore } from '@state/tripStore';
-import { transitionTrip } from '@domain/trip/trip';
+import { useSettingsStore } from '@state/settingsStore';
+import { transitionTrip, type Trip } from '@domain/trip/trip';
+import type { ArrivalSource } from '@domain/trip/arrivalEvaluator';
 import type { LocationSample } from '@domain/location/locationSample';
 import {
   subscribeArrivalEvent,
@@ -8,7 +10,26 @@ import {
   subscribeMonitoringError,
 } from '@infrastructure/location/locationEvents';
 import { locationService, toLocationSample } from '@infrastructure/location/NearBellLocationService';
+import { alarmService } from '@infrastructure/alarm/NearBellAlarmService';
 import { handleLocationEvent } from './handleLocationEvent';
+
+function applyLocationEvent(trip: Trip, sample: LocationSample, source: ArrivalSource): void {
+  const updated = handleLocationEvent(trip, sample, source, Date.now());
+  useTripStore.getState().setActiveTrip(updated);
+
+  const justArrived = trip.status === 'ACTIVE' && updated.status === 'ARRIVED';
+  if (justArrived) {
+    alarmService
+      .triggerAlarm({
+        tripId: updated.id,
+        destinationName: updated.destination.name,
+        vibrationEnabled: useSettingsStore.getState().vibrationEnabled,
+      })
+      .catch((error) => {
+        console.warn('[NearBell] triggerAlarm failed', error);
+      });
+  }
+}
 
 /**
  * Mounted once at the app root. Subscribes to native location/geofence
@@ -58,9 +79,7 @@ export function useLocationEventPipeline(): void {
       if (!trip || trip.id !== payload.tripId) {
         return;
       }
-      const sample = toLocationSample(payload);
-      const updated = handleLocationEvent(trip, sample, 'location_sample', Date.now());
-      useTripStore.getState().setActiveTrip(updated);
+      applyLocationEvent(trip, toLocationSample(payload), 'location_sample');
     });
 
     const arrivalSub = subscribeArrivalEvent((payload) => {
@@ -93,8 +112,7 @@ export function useLocationEventPipeline(): void {
               source: 'unknown',
             };
 
-      const updated = handleLocationEvent(trip, sample, 'geofence_enter', Date.now());
-      useTripStore.getState().setActiveTrip(updated);
+      applyLocationEvent(trip, sample, 'geofence_enter');
     });
 
     const errorSub = subscribeMonitoringError((payload) => {

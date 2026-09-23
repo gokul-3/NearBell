@@ -51,9 +51,9 @@
   "codegenConfig": {
     "name": "NearBellLocationSpec",
     "type": "modules",
-    "jsSrcsDir": "src/infrastructure/location/specs",
+    "jsSrcsDir": "src/infrastructure",
     "android": {
-      "javaPackageName": "com.nearbell.app.location"
+      "javaPackageName": "com.nearbell.app.specs"
     }
   }
 }

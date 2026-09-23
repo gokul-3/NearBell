@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Screen } from '@presentation/components/Screen';
@@ -9,6 +9,7 @@ import { useTheme } from '@presentation/theme/ThemeContext';
 import { useSettingsStore, type ThemePreference } from '@state/settingsStore';
 import { useTripStore } from '@state/tripStore';
 import { appVersion } from '@app/config/appInfo';
+import { alarmService } from '@infrastructure/alarm/NearBellAlarmService';
 import type { RootStackParamList } from '@app/navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
@@ -33,6 +34,24 @@ export function SettingsScreen({ navigation }: Props) {
   const clearHistory = useTripStore((state) => state.clearHistory);
   const activeTrip = useTripStore((state) => state.activeTrip);
   const setActiveTrip = useTripStore((state) => state.setActiveTrip);
+  const [testAlarmState, setTestAlarmState] = useState<'idle' | 'starting' | 'playing'>('idle');
+
+  async function handleTestAlarm() {
+    if (testAlarmState === 'playing') {
+      await alarmService.stopAlarm().catch(() => {});
+      setTestAlarmState('idle');
+      return;
+    }
+    setTestAlarmState('starting');
+    try {
+      await alarmService.requestPermissions();
+      await alarmService.testAlarm();
+      setTestAlarmState('playing');
+    } catch {
+      Alert.alert('Test alarm failed', "Couldn't play the alarm on this device.");
+      setTestAlarmState('idle');
+    }
+  }
 
   function confirmClearAllData() {
     Alert.alert(
@@ -82,6 +101,20 @@ export function SettingsScreen({ navigation }: Props) {
           value={settings.theme}
           onChange={settings.setTheme}
           accessibilityLabel="Theme"
+        />
+
+        <SectionTitle>Alarm</SectionTitle>
+        <SecondaryButton
+          label={
+            testAlarmState === 'starting'
+              ? 'Starting…'
+              : testAlarmState === 'playing'
+                ? 'Stop test alarm'
+                : 'Test alarm'
+          }
+          tone={testAlarmState === 'playing' ? 'danger' : 'neutral'}
+          onPress={handleTestAlarm}
+          disabled={testAlarmState === 'starting'}
         />
 
         <SectionTitle>Permissions</SectionTitle>

@@ -15,6 +15,7 @@ import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import com.nearbell.app.specs.NativeNearBellLocationSpec
 import java.lang.ref.WeakReference
 
 class NearBellLocationModule(reactContext: ReactApplicationContext) :
