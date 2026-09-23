@@ -1,13 +1,16 @@
 import React, { useEffect } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Map, Camera, Marker } from '@maplibre/maplibre-react-native';
 import { Screen } from '@presentation/components/Screen';
 import { Card } from '@presentation/components/Card';
 import { EmptyState } from '@presentation/components/EmptyState';
 import { SecondaryButton } from '@presentation/components/SecondaryButton';
+import { MapPin } from '@presentation/components/MapPin';
 import { useTheme } from '@presentation/theme/ThemeContext';
 import { formatApproximateDistanceMeters } from '@presentation/utils/formatDistance';
 import { useTripLifecycle } from '@application/useCases/useTripLifecycle';
+import { MAP_STYLE_URL } from '@infrastructure/maps/mapStyle';
 import type { RootStackParamList } from '@app/navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ActiveTrip'>;
@@ -90,6 +93,44 @@ export function ActiveTripScreen({ navigation }: Props) {
           {STATUS_LABEL[activeTrip.status] ?? activeTrip.status}
         </Text>
 
+        <View style={[styles.mapPreview, { borderColor: theme.colors.border }]}>
+          <Map
+            mapStyle={MAP_STYLE_URL}
+            style={styles.map}
+            dragPan={false}
+            touchZoom={false}
+            touchRotate={false}
+            attribution={false}
+            logo={false}
+          >
+            <Camera
+              initialViewState={
+                activeTrip.lastKnownLocation
+                  ? {
+                      bounds: [
+                        Math.min(activeTrip.destination.longitude, activeTrip.lastKnownLocation.longitude),
+                        Math.min(activeTrip.destination.latitude, activeTrip.lastKnownLocation.latitude),
+                        Math.max(activeTrip.destination.longitude, activeTrip.lastKnownLocation.longitude),
+                        Math.max(activeTrip.destination.latitude, activeTrip.lastKnownLocation.latitude),
+                      ],
+                      padding: { top: 40, bottom: 40, left: 40, right: 40 },
+                    }
+                  : { center: [activeTrip.destination.longitude, activeTrip.destination.latitude], zoom: 13 }
+              }
+            />
+            <Marker lngLat={[activeTrip.destination.longitude, activeTrip.destination.latitude]}>
+              <MapPin variant="destination" />
+            </Marker>
+            {activeTrip.lastKnownLocation ? (
+              <Marker
+                lngLat={[activeTrip.lastKnownLocation.longitude, activeTrip.lastKnownLocation.latitude]}
+              >
+                <MapPin variant="current" />
+              </Marker>
+            ) : null}
+          </Map>
+        </View>
+
         <Card style={styles.detailsCard}>
           <DetailRow label="Alert at" value={`${activeTrip.alertPolicy.radiusMeters} m`} />
           <DetailRow
@@ -139,6 +180,16 @@ const styles = StyleSheet.create({
   distance: {
     fontWeight: '800',
     marginTop: 8,
+  },
+  mapPreview: {
+    height: 180,
+    marginTop: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  map: {
+    flex: 1,
   },
   status: {
     marginTop: 8,

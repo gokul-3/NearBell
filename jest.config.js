@@ -1,7 +1,7 @@
 module.exports = {
   preset: '@react-native/jest-preset',
   transformIgnorePatterns: [
-    'node_modules/(?!(react-native|@react-native|@react-navigation|react-native-.*)/)',
+    'node_modules/(?!(react-native|@react-native|@react-navigation|react-native-.*|@maplibre)/)',
   ],
   testPathIgnorePatterns: ['/node_modules/', '<rootDir>/__tests__/testUtils/'],
 };
